@@ -161,7 +161,7 @@ contract SeedDex {
   */
   function order(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce) public {
     require(isValidPair(tokenGet, tokenGive));
-    require(IERC20Seed(tokenGet).okToTransferTokens(msg.sender, amountGet + tokens[tokenGet][msg.sender]));
+    require(canBeTransferred(tokenGet, msg.sender, amountGet));
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
     orders[msg.sender][hash] = true;
     emit Order(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, msg.sender);
@@ -200,7 +200,7 @@ contract SeedDex {
         bytes32  s, 
         uint     amount) public {
     require(isValidPair(tokenGet, tokenGive));
-    require(IERC20Seed(tokenGet).okToTransferTokens(msg.sender, amountGet + tokens[tokenGet][msg.sender]));
+    require(canBeTransferred(tokenGet, msg.sender, amountGet));
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
     bytes32 m = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
     require((
@@ -254,14 +254,15 @@ contract SeedDex {
   * @return bool: true if the trade would be successful, false otherwise
   */
   function testTrade(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user, uint8 v, bytes32 r, bytes32 s, uint amount, address sender) public view returns(bool) {
-    if (!(
-      tokens[tokenGet][sender] >= amount &&
-      availableVolume(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, user, v, r, s) >= amount
-      )) { 
-      return false;
-    } else {
-      return true;
-    }
+    if (tokens[tokenGet][sender] < amount) return false;
+    if (availableVolume(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, user, v, r, s) < amount) return false; 
+    if (!canBeTransferred(tokenGet, msg.sender, amountGet)) return false;
+    
+    return true;
+  }
+
+  function canBeTransferred(address token, address user, uint newAmt) private view returns(bool) {
+    return IERC20Seed(token).okToTransferTokens(user, newAmt + tokens[token][user]);
   }
 
   /**
