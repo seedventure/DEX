@@ -2,26 +2,7 @@
 
 This is the official repository for all things regarding the Seed Dex smart contract.  
 All contracts are located in the `contracts` folder.
-
-## Summary
-- [Development](#development)
-  - [Setting up a development environment](#setting-up-a-development-environment)
-  - [Migrating and testing with Ganache](#migrating-and-testing-with-ganache)
-  - [Migrating and testing with truffle develop](#migrating-and-testing-with-truffle-develop)
-  - [Migrating to the live/production chain](#migrating-to-the-liveproduction-chain)
-- [Libraries](#libraries)
-  - [LSafeMath](#library-lsafemath)
-- [Contracts](#contracts)
-  - [IToken](#contract-itoken)
-    - [Variables](#itoken-variables)
-    - [Events](#itoken-events)
-    - [Functions](#itoken-functions)
-  - [Seed Dex](#contract-forkdelta)
-    - [Variables](#forkdelta-variables)
-    - [Events](#forkdelta-events)
-    - [Modifiers](#forkdelta-modifiers)
-    - [Functions](#forkdelta-functions)
-
+This is a fork of ForkDelta ( https://github.com/forkdelta/ ) Exchange.
 
 ## Development
 
@@ -35,7 +16,7 @@ Setup:
 2. On Windows install the necessary build tools: `npm install --global --production windows-build-tools`
 3. Install Ganache from: http://truffleframework.com/ganache/
 4. Clone the repo: git clone https://github.com/forkdelta/smart_contract.git
-5. Change into the root directory: `cd smart_contract`
+5. Change into the root directory: `cd DEX`
 6. Install all node.js requirements from package.json: `npm install`
 7. If you use VSCode, copy `.vscode\settings.json.default` to `.vscode\settings.json` for a reasonable solhint linter configuration
 
@@ -67,74 +48,12 @@ This is a library for math operations with safety checks that will throw on erro
 
 ## Contracts
 
-### contract `IToken`
-
-This is the token interface necessary for working with tokens within the exchange contract.
-
-#### `IToken` Variables
-
-decimals `uint public decimals`  
-name `string public name`  
-
-#### `IToken` Events
-
-##### `event Transfer(address indexed _from, address indexed _to, uint256 _value);`
-##### `event Approval(address indexed _owner, address indexed _spender, uint256 _value);`
-
-
-#### `IToken` Functions
-
-#### `function totalSupply() public constant returns (uint256 supply) {}`
-@return total amount of tokens
-
-#### `function balanceOf(address _owner) public constant returns (uint256 balance) {}`
-@param \_owner The address from which the balance will be retrieved  
-@return The balance  
-
-#### `function transfer(address _to, uint256 _value) public returns (bool success) {}`
-@notice send `_value` token to `_to` from `msg.sender`  
-@param _to The address of the recipient  
-@param _value The amount of token to be transferred  
-@return Whether the transfer was successful or not  
-  
-#### `function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {}`
-@notice send `_value` token to `_to` from `_from` on the condition it is approved by `_from`  
-@param _from The address of the sender  
-@param _to The address of the recipient  
-@param _value The amount of token to be transferred  
-@return Whether the transfer was successful or not  
-
-#### `function approve(address _spender, uint256 _value) public returns (bool success) {}`
-@notice `msg.sender` approves `_addr` to spend `_value` tokens  
-@param _spender The address of the account able to transfer the tokens  
-@param _value The amount of wei to be approved for transfer  
-@return Whether the approval was successful or not  
-  
-#### `function allowance(address _owner, address _spender) public constant returns (uint256 remaining) {}`
-@param _owner The address of the account owning tokens  
-@param _spender The address of the account able to transfer the tokens  
-@return Amount of remaining tokens allowed to spent  
-
----
-
 ### contract `Seed Dex`
 
 This is the main contract for the Seed Dex exchange.  
 This contract uses the LSafeMath library for uint variables.  
 
 #### `Seed Dex` Variables
-
-__admin__ `address public admin`  
-The administrator's Ethereum address
-
-__feeAccount__ `address public feeAccount`  
-The Ethereum address that fees will be sent to
-
-__feeTake__ `uint public feeTake`  
-The amount (in ether) that will be taken as a fee on takes
-
-__freeUntilDate__ `uint public freeUntilDate`  
-The date in UNIX timestamp that trades will be free until
 
 __depositingTokenFlag__ `bool private depositingTokenFlag`  
 True when Token.transferFrom is being called from depositToken
@@ -148,14 +67,12 @@ The mapping of user accounts to mapping of order hashes to booleans (true = subm
 __orderFills__ `mapping (address => mapping (bytes32 => uint)) public orderFills;`  
 The mapping of user accounts to mapping of order hashes to uints (amount of order that has been filled)
 
-__predecessor__ `address public predecessor`  
-Address of the previous version of this contract. If address(0), this is the first version
+__seedToken__ `address public;` 
+address of the SEED token
 
-__successor__ `address public successor`  
-Address of the next version of this contract. If address(0), this is the most up to date version
+__factoryAddress__ `address public;`
+address of the Seed Factory
 
-__version__ `uint16 public version`  
-The version # of the contract
 
 #### `Seed Dex` Events
 
@@ -173,26 +90,11 @@ This is a modifier for functions to check if the sending user address is the sam
 
 #### `Seed Dex` Functions
 
-#### `function Seed Dex(address admin_, address feeAccount_, uint feeTake_, uint freeUntilDate_, address predecessor_) public`
+#### `function Seed Dex(address admin_, address seedToken, address factoryAddress) public`
 Constructor function. This is only called on contract creation.
 
 #### `function() public`
 The fallback function. Ether transfered into the contract is not accepted.
-
-#### `function changeAdmin(address admin_) public isAdmin`
-Changes the official admin user address. Accepts Ethereum address.
-
-#### `function changeFeeAccount(address feeAccount_) public isAdmin`
-Changes the account address that receives trading fees. Accepts Ethereum address.
-
-#### `function changeFeeTake(uint feeTake_) public isAdmin`
-Changes the fee on takes. Can only be changed to a value less than it is currently set at.
-
-#### `function changeFreeUntilDate(uint freeUntilDate_) public isAdmin`
-Changes the date that trades are free until. Accepts UNIX timestamp.
-
-#### `function setSuccessor(address successor_) public isAdmin`
-Changes the successor. Used in updating the contract.
 
 #### `function deposit() public payable`
 This function handles deposits of Ether into the contract.  
@@ -347,23 +249,3 @@ Note: tokenGet & tokenGive can be the Ethereum contract address.
 @param s part of signature for the order hash as signed by user  
 @return uint: amount of the given order that has already been filled in terms of amountGet / tokenGet  
 
-#### `function migrateFunds(address newContract, address[] tokens_) public`
-User triggered function to migrate funds into a new contract to ease updates.
-Emits a FundsMigrated event.
-@param address Contract address of the new contract we are migrating funds to
-@param address[] Array of token addresses that we will be migrating to the new contract
-
-#### `function depositForUser(address user) public payable`
-This function handles deposits of Ether into the contract, but allows specification of a user.
-Note: This is generally used in migration of funds.
-Note: With the payable modifier, this function accepts Ether.
-
-#### `function depositTokenForUser(address token, uint amount, address user) public`
-This function handles deposits of Ethereum based tokens into the contract, but allows specification of a user.
-Does not allow Ether.
-If token transfer fails, transaction is reverted and remaining gas is refunded.
-Note: This is generally used in migration of funds.
-Note: With the payable modifier, this function accepts Ether.
-Note: Remember to call Token(address).approve(this, amount) or this contract will not be able to do the transfer on your behalf.
-@param token Ethereum contract address of the token or 0 for Ether
-@param amount uint of the amount of the token the user wishes to deposit
