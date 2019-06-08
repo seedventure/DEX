@@ -1,6 +1,6 @@
-# ForkDelta's Smart Contract
+# SeedDex's Smart Contract
 
-This is the official repository for all things regarding the ForkDela smart contract.  
+This is the official repository for all things regarding the Seed Dex smart contract.  
 All contracts are located in the `contracts` folder.
 
 ## Summary
@@ -16,7 +16,7 @@ All contracts are located in the `contracts` folder.
     - [Variables](#itoken-variables)
     - [Events](#itoken-events)
     - [Functions](#itoken-functions)
-  - [ForkDelta](#contract-forkdelta)
+  - [Seed Dex](#contract-forkdelta)
     - [Variables](#forkdelta-variables)
     - [Events](#forkdelta-events)
     - [Modifiers](#forkdelta-modifiers)
@@ -55,7 +55,7 @@ Setup:
 * Edit "live" section in `truffle.js`:
 * Set reasonable gas price based on https://ethgasstation.info
 * Start local ethereum node (geth/parity) and set connection parameters in `truffle.js` 
-* Set/verify creation parameter for ForkDelta contract in `./migrations/2_deploy_contracts_js`  
+* Set/verify creation parameter for Seed Dex contract in `./migrations/2_deploy_contracts_js`  
 * Unlock account in geth/parity that is used for deploying the contract (first account or the one specified with "from" in `truffle.js`)
 * `truffle migrate -network=live`
 
@@ -117,12 +117,12 @@ name `string public name`
 
 ---
 
-### contract `ForkDelta`
+### contract `Seed Dex`
 
-This is the main contract for the ForkDelta exchange.  
+This is the main contract for the Seed Dex exchange.  
 This contract uses the LSafeMath library for uint variables.  
 
-#### `ForkDelta` Variables
+#### `Seed Dex` Variables
 
 __admin__ `address public admin`  
 The administrator's Ethereum address
@@ -157,7 +157,7 @@ Address of the next version of this contract. If address(0), this is the most up
 __version__ `uint16 public version`  
 The version # of the contract
 
-#### `ForkDelta` Events
+#### `Seed Dex` Events
 
 ##### `event Order(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user);`
 ##### `event Cancel(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user, uint8 v, bytes32 r, bytes32 s);`
@@ -166,14 +166,14 @@ The version # of the contract
 ##### `event Withdraw(address token, address user, uint amount, uint balance);`
 ##### `event FundsMigrated(address user, address newContract);`
 
-#### `ForkDelta` Modifiers
+#### `Seed Dex` Modifiers
 
 #### `modifier isAdmin()`
 This is a modifier for functions to check if the sending user address is the same as the admin user address.
 
-#### `ForkDelta` Functions
+#### `Seed Dex` Functions
 
-#### `function ForkDelta(address admin_, address feeAccount_, uint feeTake_, uint freeUntilDate_, address predecessor_) public`
+#### `function Seed Dex(address admin_, address feeAccount_, uint feeTake_, uint freeUntilDate_, address predecessor_) public`
 Constructor function. This is only called on contract creation.
 
 #### `function() public`
