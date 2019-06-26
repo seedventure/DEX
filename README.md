@@ -248,4 +248,3 @@ Note: tokenGet & tokenGive can be the Ethereum contract address.
 @param r part of signature for the order hash as signed by user  
 @param s part of signature for the order hash as signed by user  
 @return uint: amount of the given order that has already been filled in terms of amountGet / tokenGet  
-
