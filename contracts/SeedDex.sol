@@ -1,6 +1,6 @@
-pragma solidity 0.5.0;
+pragma solidity ^0.5.2;
 
-import "./IERC20Seed.sol";
+import "./IERC20.sol";
 import "./SafeMath.sol";
 import "./IFactory.sol";
 
@@ -9,26 +9,25 @@ import "./IFactory.sol";
  * @dev This is the main contract for the Seed Decentralised Exchange.
  */
 contract SeedDex {
-  
+
   using SafeMath for uint;
 
   /// Variables
-  address public admin; // the admin address
   address public seedToken; // the seed token
   address public factoryAddress; // Address of the factory
   address private ethAddress = address(0);
 
   // True when Token.transferFrom is being called from depositToken
-  bool private depositingTokenFlag; 
+  bool private depositingTokenFlag;
 
   // mapping of token addresses to mapping of account balances (token=0 means Ether)
-  mapping (address => mapping (address => uint)) public tokens; 
+  mapping (address => mapping (address => uint)) private tokens;
 
   // mapping of user accounts to mapping of order hashes to booleans (true = submitted by user, equivalent to offchain signature)
-  mapping (address => mapping (bytes32 => bool)) public orders; 
+  mapping (address => mapping (bytes32 => bool)) private orders;
 
   // mapping of user accounts to mapping of order hashes to uints (amount of order that has been filled)
-  mapping (address => mapping (bytes32 => uint)) public orderFills; 
+  mapping (address => mapping (bytes32 => uint)) private orderFills;
 
   /// Logging Events
   event Order(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user);
@@ -46,7 +45,7 @@ contract SeedDex {
 
   /// The fallback function. Ether transfered into the contract is not accepted.
   function() external {
-    revert();
+    revert("ETH not accepted!");
   }
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -71,7 +70,7 @@ contract SeedDex {
   * @param amount uint of the amount of Ether the user wishes to withdraw
   */
   function withdraw(uint amount) public {
-    require(tokens[ethAddress][msg.sender] >= amount);
+    require(tokens[ethAddress][msg.sender] >= amount, "Not enough balance");
     tokens[ethAddress][msg.sender] = tokens[ethAddress][msg.sender].sub(amount);
     msg.sender.transfer(amount);
     emit Withdraw(ethAddress, msg.sender, amount, tokens[ethAddress][msg.sender]);
@@ -88,34 +87,16 @@ contract SeedDex {
   */
   function depositToken(address token, uint amount) public {
     require(token != ethAddress, "Seed: expecting the zero address to be ERC20");
-    require(IFactory(factoryAddress).isFactoryTGenerated(token), "Seed: deposit allowed only for known tokens");
+    require(IFactory(factoryAddress).isFactoryTGenerated(token) || token == seedToken, "Seed: deposit allowed only for known tokens");
 
     depositingTokenFlag = true;
-    IERC20Seed(token).transferFrom(msg.sender, address(this), amount);
+    IERC20(token).transferFrom(msg.sender, address(this), amount);
     depositingTokenFlag = false;
     tokens[token][msg.sender] = tokens[token][msg.sender].add(amount);
-    emit Deposit(token, msg.sender, amount, tokens[token][msg.sender]); 
-  } 
-
-
-  /**
-  * This function provides a fallback solution as outlined in ERC223.
-  * If tokens are deposited through depositToken(), the transaction will continue.
-  * If tokens are sent directly to this contract, the transaction is reverted.
-  * @param sender Ethereum address of the sender of the token
-  * @param amount amount of the incoming tokens
-  * @param data attached data similar to msg.data of Ether transactions
-  */
-  function tokenFallback( address sender, uint amount, bytes memory data) public view returns (bool ok) {
-      if (depositingTokenFlag) {
-        // Transfer was initiated from depositToken(). User token balance will be updated there.
-        return true;
-      } else {
-        // Direct ECR223 Token.transfer into this contract not allowed, to keep it consistent
-        // with direct transfers of ECR20 and ETH.
-        revert();
-      }
+    emit Deposit(token, msg.sender, amount, tokens[token][msg.sender]);
   }
+
+
   
   /**
   * This function handles withdrawals of Ethereum based tokens from the contract.
@@ -127,10 +108,10 @@ contract SeedDex {
   */
   function withdrawToken(address token, uint amount) public {
     require(token != ethAddress, "Seed: expecting the zero address to be ERC20");
-    require(tokens[token][msg.sender] >= amount);
+    require(tokens[token][msg.sender] >= amount, "Not enough balance");
 
     tokens[token][msg.sender] = tokens[token][msg.sender].sub(amount);
-    require(IERC20Seed(token).transfer(msg.sender, amount));
+    require(IERC20(token).transfer(msg.sender, amount), "Transfer failed");
     emit Withdraw(token, msg.sender, amount, tokens[token][msg.sender]);
   }
 
@@ -160,8 +141,8 @@ contract SeedDex {
   * @param nonce arbitrary random number
   */
   function order(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce) public {
-    require(isValidPair(tokenGet, tokenGive));
-    require(canBeTransferred(tokenGet, msg.sender, amountGet));
+    require(isValidPair(tokenGet, tokenGive), "Not a valid pair");
+    require(canBeTransferred(tokenGet, msg.sender, amountGet), "Token quota exceeded");
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
     orders[msg.sender][hash] = true;
     emit Order(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, msg.sender);
@@ -188,26 +169,29 @@ contract SeedDex {
   * @param amount uint amount in terms of tokenGet that will be "buy" in the trade
   */
   function trade(
-        address  tokenGet, 
-        uint     amountGet, 
-        address  tokenGive, 
-        uint     amountGive, 
-        uint     expires, 
-        uint     nonce, 
-        address  user, 
-        uint8    v, 
-        bytes32  r, 
-        bytes32  s, 
+        address  tokenGet,
+        uint     amountGet,
+        address  tokenGive,
+        uint     amountGive,
+        uint     expires,
+        uint     nonce,
+        address  user,
+        uint8    v,
+        bytes32  r,
+        bytes32  s,
         uint     amount) public {
-    require(isValidPair(tokenGet, tokenGive));
-    require(canBeTransferred(tokenGet, msg.sender, amountGet));
+    require(isValidPair(tokenGet, tokenGive), "Not a valid pair");
+    require(canBeTransferred(tokenGet, msg.sender, amountGet), "Token quota exceeded");
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
     bytes32 m = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
-    require((
+    /*require((
       (orders[user][hash] || ecrecover(m, v, r, s) == user) &&
       block.number <= expires &&
       orderFills[user][hash].add(amount) <= amountGet
-    ));
+    ));*/
+    require(orders[user][hash] || ecrecover(m, v, r, s) == user, "Order does not exist");
+    require(block.number <= expires, "Order Expired");
+    require(orderFills[user][hash].add(amount) <= amountGet, "Order amount exceeds maximum availability");
     tradeBalances(tokenGet, amountGet, tokenGive, amountGive, user, amount);
     orderFills[user][hash] = orderFills[user][hash].add(amount);
     uint amt = amountGive.mul(amount) / amountGet;
@@ -229,7 +213,7 @@ contract SeedDex {
   * @param amount uint amount in terms of tokenGet that will be "buy" in the trade
   */
   function tradeBalances(address tokenGet, uint amountGet, address tokenGive, uint amountGive, address user, uint amount) private {
-    tokens[tokenGet][msg.sender] = tokens[tokenGet][msg.sender];
+    tokens[tokenGet][msg.sender] = tokens[tokenGet][msg.sender].sub(amount);
     tokens[tokenGet][user] = tokens[tokenGet][user].add(amount);
     tokens[tokenGive][user] = tokens[tokenGive][user].sub(amountGive.mul(amount).div(amountGet));
     tokens[tokenGive][msg.sender] = tokens[tokenGive][msg.sender].add(amountGive.mul(amount).div(amountGet));
@@ -255,14 +239,14 @@ contract SeedDex {
   */
   function testTrade(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user, uint8 v, bytes32 r, bytes32 s, uint amount, address sender) public view returns(bool) {
     if (tokens[tokenGet][sender] < amount) return false;
-    if (availableVolume(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, user, v, r, s) < amount) return false; 
+    if (availableVolume(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, user, v, r, s) < amount) return false;
     if (!canBeTransferred(tokenGet, msg.sender, amountGet)) return false;
-    
+
     return true;
   }
 
   function canBeTransferred(address token, address user, uint newAmt) private view returns(bool) {
-    return IERC20Seed(token).okToTransferTokens(user, newAmt + tokens[token][user]);
+    return (token == seedToken || IERC20(token).okToTransferTokens(user, newAmt + tokens[token][user]) ) ;
   }
 
   /**
@@ -281,15 +265,15 @@ contract SeedDex {
   * @return uint: amount of volume available for the given order in terms of amountGet / tokenGet
   */
   function availableVolume(
-          address tokenGet, 
-          uint amountGet, 
-          address tokenGive, 
-          uint amountGive, 
-          uint expires, 
-          uint nonce, 
-          address user, 
-          uint8 v, 
-          bytes32 r, 
+          address tokenGet,
+          uint amountGet,
+          address tokenGive,
+          uint amountGive,
+          uint expires,
+          uint nonce,
+          address user,
+          uint8 v,
+          bytes32 r,
           bytes32 s
   ) public view returns(uint) {
 
@@ -322,22 +306,22 @@ contract SeedDex {
   * @param expires uint of block number when this order should expire
   * @param nonce arbitrary random number
   * @param user Ethereum address of the user who placed the order
-  * @param v part of signature for the order hash as signed by user
-  * @param r part of signature for the order hash as signed by user
-  * @param s part of signature for the order hash as signed by user
   * @return uint: amount of the given order that has already been filled in terms of amountGet / tokenGet
   */
+  /* @param v part of signature for the order hash as signed by user
+  * @param r part of signature for the order hash as signed by user
+  * @param s part of signature for the order hash as signed by user */
   function amountFilled(
-          address tokenGet, 
-          uint amountGet, 
-          address tokenGive, 
-          uint amountGive, 
-          uint expires, 
-          uint nonce, 
-          address user, 
-          uint8 v, 
-          bytes32 r, 
-          bytes32 s
+          address tokenGet,
+          uint amountGet,
+          address tokenGive,
+          uint amountGive,
+          uint expires,
+          uint nonce,
+          address user/*,
+          uint8 v,
+          bytes32 r,
+          bytes32 s*/
   ) public view returns(uint) {
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
     return orderFills[user][hash];
@@ -363,7 +347,7 @@ contract SeedDex {
   function cancelOrder(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, uint8 v, bytes32 r, bytes32 s) public {
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
     bytes32 m = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
-    require(orders[msg.sender][hash] || ecrecover(m, v, r, s) == msg.sender);
+    require(orders[msg.sender][hash] || ecrecover(m, v, r, s) == msg.sender, "Order does not exist");
     orderFills[msg.sender][hash] = amountGet;
     emit Cancel(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, msg.sender, v, r, s);
   }
@@ -374,7 +358,7 @@ contract SeedDex {
   * @param tokenGive ethereum contract address of the token to give
   * @return bool: return true if given pair is valid, otherwise false.
   */
-  function isValidPair(address tokenGet, address tokenGive) private returns(bool) {
+  function isValidPair(address tokenGet, address tokenGive) private view returns(bool) {
      if( isEthSeedPair(tokenGet, tokenGive) ) return true;
      return isSeedPair(tokenGet, tokenGive);
   }
@@ -385,7 +369,7 @@ contract SeedDex {
   * @param tokenGive ethereum contract address of the token to give
   * @return bool: return true if it's either ETH-SEED or SEED-ETH, otherwise false.
   */
-  function isEthSeedPair(address tokenGet, address tokenGive) private returns(bool) {
+  function isEthSeedPair(address tokenGet, address tokenGive) private view returns(bool) {
       if (tokenGet == ethAddress && tokenGive == seedToken) return true;
       if (tokenGet == seedToken && tokenGive == ethAddress) return true;
       return false;
@@ -397,7 +381,7 @@ contract SeedDex {
   * @param tokenGive ethereum contract address of the token to give
   * @return bool: return true if one of the token is seed, otherwise false.
   */
-  function isSeedPair(address tokenGet, address tokenGive) private returns(bool) {
+  function isSeedPair(address tokenGet, address tokenGive) private view returns(bool) {
       if (tokenGet == tokenGive) return false;
       if (tokenGet == seedToken) return true;
       if (tokenGive == seedToken) return true;

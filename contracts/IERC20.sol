@@ -1,10 +1,10 @@
-pragma solidity ^0.5.0;
+pragma solidity ^0.5.2;
 
 /**
  * @title ERC20 interface
  * @dev see https://eips.ethereum.org/EIPS/eip-20
  */
-interface IERC20Seed {
+interface IERC20 {
     function transfer(address to, uint256 value) external returns (bool);
 
     function approve(address spender, uint256 value) external returns (bool);
@@ -17,7 +17,7 @@ interface IERC20Seed {
 
     function allowance(address owner, address spender) external view returns (uint256);
 
-    function okToTransferTokens(address _holder, uint256 _amountToAdd) external view returns (bool);
+    function okToTransferTokens(address _holder, uint256 _amountToAdd) external pure returns (bool);
 
     event Transfer(address indexed from, address indexed to, uint256 value);
 
