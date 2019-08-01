@@ -17,7 +17,7 @@ interface IERC20 {
 
     function allowance(address owner, address spender) external view returns (uint256);
 
-    function okToTransferTokens(address _holder, uint256 _amountToAdd) external pure returns (bool);
+    function okToTransferTokens(address _holder, uint256 _amountToAdd) external view returns (bool);
 
     event Transfer(address indexed from, address indexed to, uint256 value);
 
