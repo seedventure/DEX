@@ -30,11 +30,11 @@ contract SeedDex {
   mapping (address => mapping (bytes32 => uint)) private orderFills;
 
   /// Logging Events
-  event Order(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user);
-  event Cancel(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user, uint8 v, bytes32 r, bytes32 s);
-  event Trade(address tokenGet, uint amountGet, address tokenGive, uint amountGive, address get, address give);
-  event Deposit(address token, address user, uint amount, uint balance);
-  event Withdraw(address token, address user, uint amount, uint balance);
+  event Order(address indexed tokenGet, uint amountGet, address indexed tokenGive, uint amountGive, uint expires, uint nonce, address indexed user);
+  event Cancel(address indexed tokenGet, uint amountGet, address indexed tokenGive, uint amountGive, uint expires, uint nonce, address indexed  user, uint8 v, bytes32 r, bytes32 s);
+  event Trade(address indexed tokenGet, uint amountGet, address  indexed tokenGive, uint amountGive, uint expires, uint nonce, address indexed get, address indexed give);
+  event Deposit(address indexed token, address indexed user, uint amount, uint balance);
+  event Withdraw(address indexed token, address indexed user, uint amount, uint balance);
 
   /// Constructor function. This is only called on contract creation.
   constructor(address _seedToken, address _factoryAddress)  public {
@@ -75,7 +75,7 @@ contract SeedDex {
     msg.sender.transfer(amount);
     emit Withdraw(ethAddress, msg.sender, amount, tokens[ethAddress][msg.sender]);
   }
-  
+
   /**
   * This function handles deposits of Ethereum based tokens to the contract.
   * Does not allow Ether.
@@ -97,7 +97,7 @@ contract SeedDex {
   }
 
 
-  
+
   /**
   * This function handles withdrawals of Ethereum based tokens from the contract.
   * Does not allow Ether.
@@ -184,18 +184,15 @@ contract SeedDex {
     require(canBeTransferred(tokenGet, msg.sender, amountGet), "Token quota exceeded");
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
     bytes32 m = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
-    /*require((
-      (orders[user][hash] || ecrecover(m, v, r, s) == user) &&
-      block.number <= expires &&
-      orderFills[user][hash].add(amount) <= amountGet
-    ));*/
+
     require(orders[user][hash] || ecrecover(m, v, r, s) == user, "Order does not exist");
     require(block.number <= expires, "Order Expired");
     require(orderFills[user][hash].add(amount) <= amountGet, "Order amount exceeds maximum availability");
     tradeBalances(tokenGet, amountGet, tokenGive, amountGive, user, amount);
     orderFills[user][hash] = orderFills[user][hash].add(amount);
     uint amt = amountGive.mul(amount) / amountGet;
-    emit Trade(tokenGet, amount, tokenGive, amt, user, msg.sender);
+
+    emit Trade(tokenGet, amount, tokenGive, amt, expires, nonce, user, msg.sender);
   }
 
   /**
@@ -246,7 +243,7 @@ contract SeedDex {
   }
 
   function canBeTransferred(address token, address user, uint newAmt) private view returns(bool) {
-    return (token == seedToken || IERC20(token).okToTransferTokens(user, newAmt + tokens[token][user]) ) ;
+    return (token == seedToken || token == ethAddress || IERC20(token).okToTransferTokens(user, newAmt + tokens[token][user]) ) ;
   }
 
   /**
@@ -351,7 +348,7 @@ contract SeedDex {
     orderFills[msg.sender][hash] = amountGet;
     emit Cancel(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, msg.sender, v, r, s);
   }
-                                                
+
   /**
   * this function check if the given pair is valid.
   * @param tokenGet ethereum contract address of the token to receive
