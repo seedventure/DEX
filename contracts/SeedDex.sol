@@ -21,7 +21,7 @@ contract SeedDex {
   bool private depositingTokenFlag;
 
   // Maxumum expire time (blocks) for trades 
-  uint maxExpire = 64000;
+  uint private maxExpire = 64000;
 
   // mapping of token addresses to mapping of account balances (token=0 means Ether)
   mapping (address => mapping (address => uint)) private tokens;
