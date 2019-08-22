@@ -20,9 +20,6 @@ contract SeedDex {
   // True when Token.transferFrom is being called from depositToken
   bool private depositingTokenFlag;
 
-  // Maxumum expire time (blocks) for trades
-  uint private maxExpire = 64000;
-
   // mapping of token addresses to mapping of account balances (token=0 means Ether)
   mapping (address => mapping (address => uint)) private tokens;
 
@@ -151,7 +148,7 @@ contract SeedDex {
           uint expires,
           uint nonce) public {
     require( expires > block.number, "expires must be in the future");
-    require( (expires - block.number) <= maxExpire, "Specified expire time is larger than expected");
+
     require(isValidPair(tokenGet, tokenGive), "Not a valid pair");
     require(canBeTransferred(tokenGet, msg.sender, amountGet), "Token quota exceeded");
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
@@ -328,7 +325,6 @@ contract SeedDex {
   */
   function cancelOrder(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce) public {
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
-    bytes32 m = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
     require(orders[msg.sender][hash], "Order does not exist");
     orderFills[msg.sender][hash] = amountGet;
     emit Cancel(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, msg.sender);
@@ -369,12 +365,4 @@ contract SeedDex {
       if (tokenGive == seedToken) return true;
       return false;
   }
-
-  /**
-   * This function returns the maximum expire value for trades
-   * @return uint: maximum number of blocks in the future expire can be set to 
-   */
-   function getMaxExpire() public view returns(uint) {
-    return maxExpire;
-   }
 }
