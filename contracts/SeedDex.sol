@@ -30,11 +30,11 @@ contract SeedDex {
   mapping (address => mapping (bytes32 => uint)) private orderFills;
 
   /// Logging Events
-  event Order(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user);
-  event Cancel(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user, uint8 v, bytes32 r, bytes32 s);
-  event Trade(address tokenGet, uint amountGet, address tokenGive, uint amountGive, address get, address give);
-  event Deposit(address token, address user, uint amount, uint balance);
-  event Withdraw(address token, address user, uint amount, uint balance);
+  event Order(address indexed tokenGet, uint amountGet, address indexed tokenGive, uint amountGive, uint expires, uint nonce, address indexed user);
+  event Cancel(address indexed tokenGet, uint amountGet, address indexed tokenGive, uint amountGive, uint expires, uint nonce, address indexed user);
+  event Trade(address indexed tokenGet, uint amountGet, address  indexed tokenGive, uint amountGive, uint expires, uint nonce, address indexed get, uint amount, uint executeAmount, address give);
+  event Deposit(address indexed token, address indexed user, uint amount, uint balance);
+  event Withdraw(address indexed token, address indexed user, uint amount, uint balance);
 
   /// Constructor function. This is only called on contract creation.
   constructor(address _seedToken, address _factoryAddress)  public {
@@ -75,7 +75,7 @@ contract SeedDex {
     msg.sender.transfer(amount);
     emit Withdraw(ethAddress, msg.sender, amount, tokens[ethAddress][msg.sender]);
   }
-  
+
   /**
   * This function handles deposits of Ethereum based tokens to the contract.
   * Does not allow Ether.
@@ -97,7 +97,7 @@ contract SeedDex {
   }
 
 
-  
+
   /**
   * This function handles withdrawals of Ethereum based tokens from the contract.
   * Does not allow Ether.
@@ -140,7 +140,14 @@ contract SeedDex {
   * @param expires uint of block number when this order should expire
   * @param nonce arbitrary random number
   */
-  function order(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce) public {
+  function order(
+          address tokenGet,
+          uint amountGet,
+          address tokenGive,
+          uint amountGive,
+          uint expires,
+          uint nonce) public {
+    require(expires > block.number, "expires must be in the future");
     require(isValidPair(tokenGet, tokenGive), "Not a valid pair");
     require(canBeTransferred(tokenGet, msg.sender, amountGet), "Token quota exceeded");
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
@@ -163,9 +170,6 @@ contract SeedDex {
   * @param expires uint of block number when this order should expire
   * @param nonce arbitrary random number
   * @param user Ethereum address of the user who placed the order
-  * @param v part of signature for the order hash as signed by user
-  * @param r part of signature for the order hash as signed by user
-  * @param s part of signature for the order hash as signed by user
   * @param amount uint amount in terms of tokenGet that will be "buy" in the trade
   */
   function trade(
@@ -176,26 +180,19 @@ contract SeedDex {
         uint     expires,
         uint     nonce,
         address  user,
-        uint8    v,
-        bytes32  r,
-        bytes32  s,
         uint     amount) public {
+    require(block.number <= expires, "Order Expired");
+
     require(isValidPair(tokenGet, tokenGive), "Not a valid pair");
     require(canBeTransferred(tokenGet, msg.sender, amountGet), "Token quota exceeded");
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
-    bytes32 m = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
-    /*require((
-      (orders[user][hash] || ecrecover(m, v, r, s) == user) &&
-      block.number <= expires &&
-      orderFills[user][hash].add(amount) <= amountGet
-    ));*/
-    require(orders[user][hash] || ecrecover(m, v, r, s) == user, "Order does not exist");
-    require(block.number <= expires, "Order Expired");
+    require(orders[user][hash], "Order does not exist");
     require(orderFills[user][hash].add(amount) <= amountGet, "Order amount exceeds maximum availability");
+
     tradeBalances(tokenGet, amountGet, tokenGive, amountGive, user, amount);
     orderFills[user][hash] = orderFills[user][hash].add(amount);
-    uint amt = amountGive.mul(amount) / amountGet;
-    emit Trade(tokenGet, amount, tokenGive, amt, user, msg.sender);
+    uint executedAmount = amountGive.mul(amount) / amountGet;
+    emit Trade(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, user, amount, executeAmount, msg.sender);
   }
 
   /**
@@ -230,23 +227,20 @@ contract SeedDex {
   * @param expires uint of block number when this order should expire
   * @param nonce arbitrary random number
   * @param user Ethereum address of the user who placed the order
-  * @param v part of signature for the order hash as signed by user
-  * @param r part of signature for the order hash as signed by user
-  * @param s part of signature for the order hash as signed by user
   * @param amount uint amount in terms of tokenGet that will be "buy" in the trade
   * @param sender Ethereum address of the user taking the order
   * @return bool: true if the trade would be successful, false otherwise
   */
-  function testTrade(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user, uint8 v, bytes32 r, bytes32 s, uint amount, address sender) public view returns(bool) {
+  function testTrade(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, address user, uint amount, address sender) public view returns(bool) {
     if (tokens[tokenGet][sender] < amount) return false;
-    if (availableVolume(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, user, v, r, s) < amount) return false;
+    if (availableVolume(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, user) < amount) return false;
     if (!canBeTransferred(tokenGet, msg.sender, amountGet)) return false;
 
     return true;
   }
 
   function canBeTransferred(address token, address user, uint newAmt) private view returns(bool) {
-    return (token == seedToken || IERC20(token).okToTransferTokens(user, newAmt + tokens[token][user]) ) ;
+    return (token == seedToken || token == ethAddress || IERC20(token).okToTransferTokens(user, newAmt + tokens[token][user]) ) ;
   }
 
   /**
@@ -259,9 +253,6 @@ contract SeedDex {
   * @param expires uint of block number when this order should expire
   * @param nonce arbitrary random number
   * @param user Ethereum address of the user who placed the order
-  * @param v part of signature for the order hash as signed by user
-  * @param r part of signature for the order hash as signed by user
-  * @param s part of signature for the order hash as signed by user
   * @return uint: amount of volume available for the given order in terms of amountGet / tokenGet
   */
   function availableVolume(
@@ -271,21 +262,17 @@ contract SeedDex {
           uint amountGive,
           uint expires,
           uint nonce,
-          address user,
-          uint8 v,
-          bytes32 r,
-          bytes32 s
+          address user
   ) public view returns(uint) {
 
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
 
-    if ( (orders[user][hash] || ecrecover(keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash)), v, r, s) == user) || block.number <= expires ) {
+    if ( ! (orders[user][hash] || block.number <= expires )) {
       return 0;
     }
 
     uint[2] memory available;
     available[0] = amountGet.sub(orderFills[user][hash]);
-
     available[1] = tokens[tokenGive][user].mul(amountGet) / amountGive;
 
     if (available[0] < available[1]) {
@@ -308,9 +295,6 @@ contract SeedDex {
   * @param user Ethereum address of the user who placed the order
   * @return uint: amount of the given order that has already been filled in terms of amountGet / tokenGet
   */
-  /* @param v part of signature for the order hash as signed by user
-  * @param r part of signature for the order hash as signed by user
-  * @param s part of signature for the order hash as signed by user */
   function amountFilled(
           address tokenGet,
           uint amountGet,
@@ -318,11 +302,7 @@ contract SeedDex {
           uint amountGive,
           uint expires,
           uint nonce,
-          address user/*,
-          uint8 v,
-          bytes32 r,
-          bytes32 s*/
-  ) public view returns(uint) {
+          address user) public view returns(uint) {
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
     return orderFills[user][hash];
   }
@@ -339,19 +319,15 @@ contract SeedDex {
   * @param amountGive uint amount of tokens being given
   * @param expires uint of block number when this order should expire
   * @param nonce arbitrary random number
-  * @param v part of signature for the order hash as signed by user
-  * @param r part of signature for the order hash as signed by user
-  * @param s part of signature for the order hash as signed by user
   * @return uint: amount of the given order that has already been filled in terms of amountGet / tokenGet
   */
-  function cancelOrder(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce, uint8 v, bytes32 r, bytes32 s) public {
+  function cancelOrder(address tokenGet, uint amountGet, address tokenGive, uint amountGive, uint expires, uint nonce) public {
     bytes32 hash = sha256(abi.encodePacked(this, tokenGet, amountGet, tokenGive, amountGive, expires, nonce));
-    bytes32 m = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
-    require(orders[msg.sender][hash] || ecrecover(m, v, r, s) == msg.sender, "Order does not exist");
+    require(orders[msg.sender][hash], "Order does not exist");
     orderFills[msg.sender][hash] = amountGet;
-    emit Cancel(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, msg.sender, v, r, s);
+    emit Cancel(tokenGet, amountGet, tokenGive, amountGive, expires, nonce, msg.sender);
   }
-                                                
+
   /**
   * this function check if the given pair is valid.
   * @param tokenGet ethereum contract address of the token to receive
